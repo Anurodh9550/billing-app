@@ -1,26 +1,105 @@
-@import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* @import "tailwindcss";
+@layer components {
+    .label {
+        @apply block text-sm font-semibold text-gray-700;
+    }
+    .input {
+        @apply mt-1 w-full rounded-lg border border-gray-300 px-4 py-2 bg-gray-50 outline-none;
+    }
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@media print {
+    @page {
+        size: A4;
+        margin: 15mm;
+    }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    .invoice-print,
+    .invoice-print * {
+        visibility: visible;
+    }
+    .invoice-print {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+    @page {
+        size: A4;
+        margin: 15mm;
+    }
+} */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ================= PRINT SETTINGS ================= */
+
+@media print {
+    @page {
+        size: A4;
+        margin: 0;
+        /* 👈 Perfect balanced margin */
+    }
+    html,
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white;
+    }
+    .no-print {
+        display: none !important;
+    }
+    /* Hide everything except invoice */
+    body * {
+        visibility: hidden;
+    }
+    .invoice-print,
+    .invoice-print * {
+        visibility: visible;
+    }
+    .invoice-print {
+        position: absolute;
+        top: 8mm;
+        left: 0;
+        width: 210mm;
+        /* 210 - (5+5) = 200mm PERFECT FIT */
+        margin: 0 auto;
+        box-shadow: none !important;
+    }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.invoice-print {
+    font-family: "Times New Roman", serif;
+}
+
+.invoice-print input,
+.invoice-print select,
+.invoice-print textarea {
+    font-family: "Times New Roman", serif;
+}
+
+
+/* Remove arrows from number input */
+
+
+/* Chrome, Safari, Edge */
+
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+
+/* Firefox */
+
+input[type=number] {
+    -moz-appearance: textfield;
 }

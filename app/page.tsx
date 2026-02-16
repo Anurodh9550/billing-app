@@ -9,7 +9,7 @@ export default function Home() {
           GST Billing System for General Shop
         </p>
         <Link
-          href="/billing"
+          href="/party"
           className="px-6 py-3 bg-blue-600 text-white rounded"
         >
           Go to Billing
