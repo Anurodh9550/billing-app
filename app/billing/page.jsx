@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import jsPDF from "jspdf";
+
 import { ToWords } from "to-words";
 
 
@@ -31,11 +31,12 @@ export default function BillingPage() {
       discount: 0,
       sgstRate: 0,
       cgstRate: 0,
+      igstRate: 0,
     },
   ]);
 
   /* SUMMARY GST */
-  const [selectedGST, setSelectedGST] = useState(0);
+ 
 
   useEffect(() => {
     const data = localStorage.getItem("partyDetails");
@@ -47,10 +48,21 @@ export default function BillingPage() {
     return <p className="text-center mt-10">Loading party details...</p>;
   }
   const updateItem = (i, k, v) => {
-    const updated = [...items];
+  const updated = [...items];
+
+  // numeric fields auto convert
+  if (
+    ["qty", "rate", "discount", "mrp",
+     "sgstRate", "cgstRate", "igstRate"].includes(k)
+  ) {
+    updated[i][k] = Number(v) || 0;
+  } else {
     updated[i][k] = v;
-    setItems(updated);
-  };
+  }
+
+  setItems(updated);
+};
+
 
   const addRow = () => {
     setItems([
@@ -63,22 +75,37 @@ export default function BillingPage() {
         discount: 0,
         sgstRate: 0,
         cgstRate: 0,
+        igstRate: 0, 
+        
       },
     ]);
   };
 
   /* ================= CALCULATIONS ================= */
-  const totalSGST = items.reduce((sum, i) => {
+  const totalIGST = items.reduce((sum, i) => {
     const base = i.qty * i.rate;
     const disc = (base * i.discount) / 100;
     const afterDisc = base - disc;
+    return sum + (afterDisc * i.igstRate) / 100;
+  }, 0);
+
+  const totalSGST = items.reduce((sum, i) => {
+    if (i.igstRate > 0) return sum; // skip if IGST applied
+
+    const base = i.qty * i.rate;
+    const disc = (base * i.discount) / 100;
+    const afterDisc = base - disc;
+
     return sum + (afterDisc * i.sgstRate) / 100;
   }, 0);
 
   const totalCGST = items.reduce((sum, i) => {
+    if (i.igstRate > 0) return sum;
+
     const base = i.qty * i.rate;
     const disc = (base * i.discount) / 100;
     const afterDisc = base - disc;
+
     return sum + (afterDisc * i.cgstRate) / 100;
   }, 0);
 
@@ -90,35 +117,36 @@ export default function BillingPage() {
   }, 0);
 
   // Apply ONLY selected GST
-  const summarySGST =
-    selectedGST > 0 ? (subTotal * selectedGST) / 200 : 0;
+  
 
-  const summaryCGST =
-    selectedGST > 0 ? (subTotal * selectedGST) / 200 : 0;
+  const grandTotal = subTotal + totalSGST + totalCGST + totalIGST;
+  const safeGrandTotal = isNaN(grandTotal) ? 0 : grandTotal;
 
-  const grandTotal = subTotal + totalSGST + totalCGST;
   const gstSummary = [0, 5, 12, 18, 28].map(rate => {
     let sgst = 0;
     let cgst = 0;
+    let igst = 0;
 
     items.forEach(i => {
       const base = i.qty * i.rate;
       const disc = (base * i.discount) / 100;
       const taxable = base - disc;
 
-      // SGST + CGST dono milke total GST = rate
-      if (i.sgstRate + i.cgstRate === rate) {
+      if (i.igstRate === rate) {
+        igst += (taxable * i.igstRate) / 100;
+      }
+
+      if (i.igstRate === 0 && i.sgstRate + i.cgstRate === rate) {
         sgst += (taxable * i.sgstRate) / 100;
         cgst += (taxable * i.cgstRate) / 100;
       }
     });
 
-    return {
-      rate,
-      sgst,
-      cgst,
-    };
+    return { rate, sgst, cgst, igst };
   });
+
+
+
 
 
   /* ================= PRINT ================= */
@@ -262,9 +290,10 @@ export default function BillingPage() {
                   "MRP",
                   "Rate",
                   "Disc%",
-                  "Aft Disc",
+                  
                   "SGST",
                   "CGST",
+                  "IGST",
                   "Amount",
                 ].map((h, index, arr) => (
                   <th
@@ -288,9 +317,15 @@ export default function BillingPage() {
                 const base = item.qty * item.rate;
                 const discAmt = (base * item.discount) / 100;
                 const afterDisc = base - discAmt;
-                const sgstAmt = (afterDisc * item.sgstRate) / 100;
-                const cgstAmt = (afterDisc * item.cgstRate) / 100;
-                const finalAmt = afterDisc + sgstAmt + cgstAmt;
+                const sgstAmt =
+                  item.igstRate > 0 ? 0 : (afterDisc * item.sgstRate) / 100;
+
+                const cgstAmt =
+                  item.igstRate > 0 ? 0 : (afterDisc * item.cgstRate) / 100;
+
+                const igstAmt =
+                  item.igstRate > 0 ? (afterDisc * item.igstRate) / 100 : 0;
+                const finalAmt = afterDisc + sgstAmt + cgstAmt + igstAmt;
 
                 return (
                   <tr key={i} className="h-3">
@@ -304,7 +339,10 @@ export default function BillingPage() {
                         type="number"
 
                         value={item.qty}
-                        onChange={(e) => updateItem(i, "qty", e.target.value)}
+                      onChange={(e) =>
+  updateItem(i, "qty", Number(e.target.value) || 0)
+}
+
                         className="w-full  text-sm  text-center no-spinner"
                       />
 
@@ -383,29 +421,69 @@ export default function BillingPage() {
 
                     </td>
 
-                    <td className="border-y border-x border-black  text-sm font-semibold text-center text-sm">
-                      {afterDisc.toFixed(2)}
-                    </td>
+                    
 
-                    <td className=" relative border-y border-x border-black text-sm text-right  text-sm font-semibold">
-                      <select value={item.sgstRate}
-                        onChange={e => updateItem(i, "sgstRate", +e.target.value)}
-                        className="absolute inset-0  text-sm font-semibold opacity-0 cursor-pointer" >
-                        {[0, 2.5, 6, 9, 14].map(v => (<option key={v} value={v}>
-                          {v}%</option>))}
+                    <td className="relative border-y border-x border-black text-sm text-right font-semibold">
+                      <select
+                        value={item.sgstRate}
+                        onChange={e => {
+                          const value = +e.target.value;
+
+                          updateItem(i, "sgstRate", value);
+                          updateItem(i, "igstRate", 0);   // 👈 IGST reset hoga
+                        }}
+                        className="absolute inset-0 text-sm font-semibold opacity-0 cursor-pointer"
+                      >
+                        {[0, 2.5, 6, 9, 14].map(v => (
+                          <option key={v} value={v}>
+                            {v}%
+                          </option>
+                        ))}
                       </select>
                       {sgstAmt.toFixed(2)}
                     </td>
 
                     <td className=" relative border-y   text-sm font-semibold border-x border-black text-right">
-                      <select value={item.cgstRate}
-                        onChange={e => updateItem(i, "cgstRate", +e.target.value)}
-                        className="absolute inset-0 opacity-0   text-sm font-semibold cursor-pointer" >
-                        {[0, 2.5, 6, 9, 14].map(v => (<option key={v} value={v}>
-                          {v}%</option>))}
+                      <select
+                        value={item.cgstRate}
+                        onChange={e => {
+                          const value = +e.target.value;
+
+                          updateItem(i, "cgstRate", value);
+                          updateItem(i, "igstRate", 0);   // 👈 IGST reset hoga
+                        }}
+                        className="absolute inset-0 text-sm font-semibold opacity-0 cursor-pointer"
+                      >
+                        {[0, 2.5, 6, 9, 14].map(v => (
+                          <option key={v} value={v}>
+                            {v}%
+                          </option>
+                        ))}
                       </select>
                       {cgstAmt.toFixed(2)}
                     </td>
+                    <td className="relative border-y border-x border-black text-right text-sm font-semibold">
+                      <select
+                        value={item.igstRate}
+                        onChange={e => {
+                          const value = +e.target.value;
+
+                          updateItem(i, "igstRate", value);
+
+                          if (value > 0) {
+                            updateItem(i, "sgstRate", 0);
+                            updateItem(i, "cgstRate", 0);
+                          }
+                        }}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      >
+                        {[0, 5, 12, 18, 28].map(v => (
+                          <option key={v} value={v}>{v}%</option>
+                        ))}
+                      </select>
+                      {igstAmt.toFixed(2)}
+                    </td>
+
 
                     {/* LAST COLUMN (NO RIGHT BORDER) */}
                     <td className="border-y border-l  text-sm font-semibold  border-black text-right pl-1">
@@ -451,10 +529,11 @@ export default function BillingPage() {
                     <td className="border-y border-black border-x  text-right text-sm font-semibold">
                       {g.cgst.toFixed(2)}
                     </td>
-
-                    <td className="border-y border-r-[2px]  text-right border-black  text-sm font-semibold">
-                      0.00
+                    <td className="border-y border-black border-x text-right text-sm font-semibold">
+                      {g.igst.toFixed(2)}
                     </td>
+
+
                   </tr>
                 ))}
               </tbody>
@@ -482,8 +561,9 @@ export default function BillingPage() {
                 </div>
                 <div className="flex justify-between mr-3 text-sm font-semibold ">
                   <span className="ml-3">IGST</span>
-                  <span>0.00</span>
+                  <span>{totalIGST.toFixed(2)}</span>
                 </div>
+
                 <div className="flex justify-between mr-3  text-sm font-semibold">
                   <span className="ml-3">ADD/LESS</span>
                   <span>0.00</span>
@@ -493,9 +573,10 @@ export default function BillingPage() {
                   <span>0.00</span>
                 </div>
 
-                <div className="flex justify-between border-t-2 border-black mt-3 text-sm font-semibold pt-2 text-base">
-                  <span>GRAND TOTAL</span>
-                  <span className="mr-3"> {grandTotal.toFixed(2)}</span>
+                <div className="flex justify-between border-t-2 border-black mt-3 text-sm font-semibold pt-2  text-base">
+                  <span className="pl-2">GRAND TOTAL</span>
+                  <span className="mr-3"> {safeGrandTotal.toFixed(2)}
+</span>
                 </div>
 
               </div>
@@ -508,7 +589,8 @@ export default function BillingPage() {
 
 
 
-            <p className="text-sm  pl-3  font-semibold">Rs: <span> {toWords.convert(grandTotal)}</span>
+            <p className="text-sm  pl-3  font-semibold">Rs: <span> {toWords.convert(safeGrandTotal)}
+</span>
 
             </p>
 
